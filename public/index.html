@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+    <title>Dart alive</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="jquery-3.1.1.min.js"></script>
+    <style>
+        .dead #alive {
+            display: none;
+        }
+
+        .alive #dead {
+            display: none;
+        }
+
+        .logo {
+            cursor: pointer;
+            width: 300px;
+        }
+
+        #loader {
+            border: 10px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 10px solid #3498db;
+            width: 50px;
+            height: 50px;
+            -webkit-animation: spin 2s linear infinite;
+            animation: spin 2s linear infinite;
+        }
+
+        @-webkit-keyframes spin {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #container {
+            text-align: center;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgb(213,206,166);
+            background: -moz-radial-gradient(center, ellipse cover, rgba(213,206,166,1) 0%, rgba(201,193,144,1) 40%, rgba(183,173,112,1) 100%);
+            background: -webkit-radial-gradient(center, ellipse cover, rgba(213,206,166,1) 0%,rgba(201,193,144,1) 40%,rgba(183,173,112,1) 100%);
+            background: radial-gradient(ellipse at center, rgba(213,206,166,1) 0%,rgba(201,193,144,1) 40%,rgba(183,173,112,1) 100%);
+            filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#d5cea6', endColorstr='#b7ad70',GradientType=1 );
+        }
+
+        #container.dead {
+            background: rgb(244,198,188);
+            background: -moz-radial-gradient(center, ellipse cover, rgba(244,198,188,1) 0%, rgba(252,201,201,1) 47%, rgba(252,163,133,1) 100%);
+            background: -webkit-radial-gradient(center, ellipse cover, rgba(244,198,188,1) 0%,rgba(252,201,201,1) 47%,rgba(252,163,133,1) 100%);
+            background: radial-gradient(ellipse at center, rgba(244,198,188,1) 0%,rgba(252,201,201,1) 47%,rgba(252,163,133,1) 100%);
+            filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#f4c6bc', endColorstr='#fca385',GradientType=1 );
+        }
+
+        #container.alive {
+            background: rgb(216,239,255);
+            background: -moz-radial-gradient(center, ellipse cover, rgba(216,239,255,1) 0%, rgba(203,235,255,1) 47%, rgba(161,219,255,1) 100%);
+            background: -webkit-radial-gradient(center, ellipse cover, rgba(216,239,255,1) 0%,rgba(203,235,255,1) 47%,rgba(161,219,255,1) 100%);
+            background: radial-gradient(ellipse at center, rgba(216,239,255,1) 0%,rgba(203,235,255,1) 47%,rgba(161,219,255,1) 100%);
+            filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#d8efff', endColorstr='#a1dbff',GradientType=1 );
+        }
+
+        .invisible {
+            display: none;
+        }
+
+        #vote img {
+            margin-right: 50px;
+            margin-left: 50px;
+        }
+
+    </style>
+</head>
+<body>
+<div id="container">
+    <div id="loader"></div>
+    <div id="vote" class="invisible">
+        <img src="img/skull.gif" id="dead" class="logo">
+        <img src="img/dart.png" id="alive" class="logo">
+    </div>
+</div>
+<script src="fingerprint2.min.js"></script>
+<script>
+    var isVoted;
+
+    function setOpinionClass(opinion) {
+        $('#container').removeClass().addClass(opinion).addClass('voted');
+    }
+
+    function switchOpinion(opinion){
+        if(opinion === 'dead') {
+            return 'alive';
+        } else {
+            return 'dead';
+        }
+    }
+
+    function showLoader(show) {
+        $("#loader").toggleClass('invisible', !show);
+        $("#vote").toggleClass('invisible', show);
+    }
+
+    function vote(opinion) {
+        showLoader(true);
+        if(isVoted) {
+            opinion = switchOpinion(opinion);
+        }
+        var fp = new Fingerprint2();
+        fp.get(function (result) {
+            $.ajax({
+                url: "/vote",
+                type: "POST",
+                headers: {
+                    "Accept": "application/json; charset=utf-8",
+                    "fingerprint": result
+                },
+                contentType: "application/json; charset=utf-8",
+                data: JSON.stringify({vote: opinion}),
+            }).done(function () {
+                isVoted = true;
+                setOpinionClass(opinion);
+                showLoader(false);
+            }).fail(function () {
+                // TODO Add error logging
+            });
+        });
+    }
+
+    $(document).ready(function () {
+        showLoader(true);
+        $.get('/vote').done(function (result) {
+            isVoted = true;
+            setOpinionClass(result.vote);
+        }).fail(function () {
+        }).always(function () {
+            showLoader(false);
+        });
+    });
+
+    $('#dead').on("click", function () {
+        vote('dead');
+    });
+
+    $('#alive').on("click", function () {
+        vote('alive');
+    });
+</script>
+</body>
+</html>
