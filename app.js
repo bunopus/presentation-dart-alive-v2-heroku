@@ -94,13 +94,16 @@ function vote(vote, res, userId, newUser) {
 }
 
 app.get('/stats', (req, res) => {
-    db.collection('votes').find(
-        [{$group: {_id: '$vote', count: {$sum: 1}}}], {}, (err, result) => {
-            if (err) {
-                res.status(500).send(err);
-            }
-            res.send(result);
+    db.collection('votes').find().toArray((err, results) => {
+        if (err) {
+            res.status(500).send(err);
+        }
+        let votes = {};
+        results.forEach((result) => {
+            votes[result.vote] = result.count;
         });
+        res.send(votes);
+    });
 });
 
 MongoClient.connect(dbUrl, (err, database) => {
