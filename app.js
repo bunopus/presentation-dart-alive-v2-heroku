@@ -5,7 +5,8 @@ const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 const app = express();
 const MongoClient = require('mongodb').MongoClient;
-const ObjectID = require('mongodb').ObjectID;
+const crypto = require('crypto');
+const throttle = require('express-throttle');
 
 const dbUrl = process.env.MONGO_URL;
 const port = process.env.PORT;
@@ -30,7 +31,19 @@ app.use(logger);
 
 app.use(express.static(__dirname + '/public'));
 
-app.post('/vote', (req, res) => {
+let options = {
+    'burst': 10,
+    'period': '30sec',
+    'key': function(req) {
+        return _getCookie(req);
+    },
+    'on_throttled': function(req, res, next, bucket) {
+        let time = bucket.etime - new Date();
+        res.status(429).send({time});
+    },
+};
+
+app.post('/vote', throttle(options), (req, res) => {
     let fingerprint = _getFingerprint(req);
     if(!fingerprint) {
         res.sendStatus(400);
@@ -39,43 +52,13 @@ app.post('/vote', (req, res) => {
 
     let cookieUserId = _getCookie(req);
 
-    let data = {
-        fingerprint: fingerprint,
-        vote: req.body.vote,
-    };
-
     if(!cookieUserId) {
-        insertNewVote(data, res);
+        // eslint-disable-next-line max-len
+        let generatedUserId = generateUserId(req.connection.remoteAddress, fingerprint);
+        vote(req.body.vote, res, generatedUserId, true);
     } else {
-        updateVote(cookieUserId, data, res);
+        vote(req.body.vote, res, cookieUserId);
     }
-});
-
-app.get('/vote', (req, res) => {
-    let cookieUserId = _getCookie(req);
-    if (!cookieUserId) {
-        res.sendStatus(401);
-        return;
-    }
-    db.collection('votes').findOne(_getVoteQuery(cookieUserId))
-        .then((result) => {
-            if (!result) {
-                res.clearCookie(USER_COOKIE_NAME);
-                res.sendStatus(401);
-            } else {
-                res.send({vote: result.vote});
-            }
-        });
-});
-
-app.get('/stats', (req, res) => {
-    db.collection('votes').aggregate(
-        [{$group: {_id: '$vote', count: {$sum: 1}}}], {}, (err, result) => {
-            if (err) {
-                res.status(500).send(err);
-            }
-            res.send(result);
-        });
 });
 
 function _getCookie(req) {
@@ -86,30 +69,39 @@ function _getFingerprint(req) {
     return req.headers['fingerprint'];
 }
 
-function insertNewVote(data, res) {
-    db.collection('votes').insertOne(data)
-        .then((result) => {
-            res.cookie(USER_COOKIE_NAME, JSON.stringify(result.insertedId), {
-                maxAge: 30 * 24 * 60 * 60 * 1000,
-                httpOnly: true,
-                secure: false,
-            });
-            res.sendStatus(200);
-        });
+function generateUserId(ipAddr, fingerprint) {
+    let rand = crypto.randomBytes(24).toString('hex');
+    let data = `${ipAddr}${fingerprint}${rand}`;
+    return crypto.createHash('md5').update(data).digest('hex');
 }
 
-function updateVote(cookieUserId, data, res) {
-    let query = _getVoteQuery(cookieUserId);
-    db.collection('votes').updateOne(query, data)
+function vote(vote, res, userId, newUser) {
+    if (newUser) {
+        res.cookie(USER_COOKIE_NAME, userId, {
+            maxAge: 30 * 24 * 60 * 60 * 1000,
+            httpOnly: true,
+            secure: false,
+        });
+    }
+    db.collection('votes').updateOne(
+        {vote: vote},
+        {$inc: {count: 1}},
+        {upsert: true}
+    )
         .then(() => {
             res.sendStatus(200);
         });
 }
 
-function _getVoteQuery(cookieUserId) {
-    let id = new ObjectID(JSON.parse(cookieUserId));
-    return {_id: id};
-}
+app.get('/stats', (req, res) => {
+    db.collection('votes').find(
+        [{$group: {_id: '$vote', count: {$sum: 1}}}], {}, (err, result) => {
+            if (err) {
+                res.status(500).send(err);
+            }
+            res.send(result);
+        });
+});
 
 MongoClient.connect(dbUrl, (err, database) => {
     if (err) {
@@ -120,6 +112,4 @@ MongoClient.connect(dbUrl, (err, database) => {
         console.log('Poll listening on port ' + port);
     });
 });
-
-// TODO handle close
 

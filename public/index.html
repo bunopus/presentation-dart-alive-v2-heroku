@@ -48,11 +48,38 @@
             margin-right: 10vw;
             margin-left: 10vw;
         }
+        .message-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            background-color: black;
+            opacity: 0.8;
 
+            filter: blur(10px);
+            -webkit-filter: blur(10px);
+            -moz-filter: blur(10px);
+            -o-filter: blur(10px);
+            -ms-filter: blur(10px);
+            filter: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' ><filter id='svgMask'><feGaussianBlur stdDeviation='10' /></filter></svg>#svgMask");
+            font-size: 90px;
+            color: white;
+            display: none;
+        }
+
+        #message {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+        }
     </style>
 </head>
 <body>
 <div id="container">
+    <div class="message-container"><div id="message"></div></div>
     <div id="loader"></div>
     <div id="vote" class="invisible">
         <img src="img/skull.png" id="dead" class="logo">
@@ -64,6 +91,11 @@
     function showLoader(show) {
         $("#loader").toggleClass('invisible', !show);
         $("#vote").toggleClass('invisible', show);
+    }
+
+    function showText(text) {
+        $("#message").text(text);
+        $(".message-container").show().delay(2000).fadeOut();
     }
 
     function vote(opinion) {
@@ -80,16 +112,22 @@
                 },
                 contentType: "application/json; charset=utf-8",
                 data: JSON.stringify({vote: opinion}),
-            }).done(function () {
-                showLoader(false);
             }).fail(function (error) {
-                console.log(error);
+                if(error.status === 429) {
+                    var time = error.responseJSON.time/1000;
+                    showText("Подожди " + Math.round(time) + ' сек');
+                } else {
+                    console.log(error);
+                }
+            }).always(function () {
+                showLoader(false);
             });
         });
     }
 
     $(document).ready(function () {
         showLoader(false);
+
     });
 
     $('#dead').on("click", function () {
