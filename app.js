@@ -32,8 +32,8 @@ app.use(logger);
 app.use(express.static(__dirname + '/public'));
 
 let options = {
-    'burst': 10,
-    'period': '30sec',
+    'burst': 2,
+    'period': '10sec',
     'key': function(req) {
         return _getCookie(req);
     },
